@@ -30,3 +30,4 @@ The `RatelimitedEngine` takes the following parameters:
 - `tpm_period` (float): The duration, in seconds, of the time period in which to limit the rate. Note that up to
   *tpm_limit* tokens are allowed within this time period in a burst (default 60s).
 
+The ratelimiter will ensure that all conditions are met before forwarding the request to the wrapped engine.

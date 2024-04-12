@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 from contextlib import nullcontext
 from typing import TYPE_CHECKING
 
@@ -33,6 +34,8 @@ class RatelimitedEngine(BaseEngine):
             oai_engine = OpenAIEngine(api_key, model="gpt-4")
             engine = RatelimitedEngine(oai_engine, rpm_limit=10, tpm_limit=30_000)
 
+        This engine will pass-through attribute accesses to the wrapped engine.
+
         :param engine: The engine to wrap.
         :param max_concurrency: The maximum number of concurrent requests to serve at once (default unlimited).
         :param rpm_limit: The maximum number of requests to serve per *rpm_period* (default unlimited).
@@ -64,16 +67,26 @@ class RatelimitedEngine(BaseEngine):
         self.max_context_size = self.engine.max_context_size
         self.token_reserve = self.engine.token_reserve
 
-    async def predict(
-        self, messages: list[ChatMessage], functions: list[AIFunction] | None = None, **hyperparams
-    ) -> BaseCompletion:
+    @contextlib.asynccontextmanager
+    async def _ratelimit_ctx(self, messages: list[ChatMessage], functions: list[AIFunction] | None):
         if self.rpm_limiter:
             await self.rpm_limiter.acquire()
         if self.tpm_limiter:
             n_toks = self.function_token_reserve(functions) + sum(self.message_len(m) for m in messages)
             await self.tpm_limiter.acquire(n_toks)
         async with self.concurrency_semaphore:
+            yield
+
+    async def predict(
+        self, messages: list[ChatMessage], functions: list[AIFunction] | None = None, **hyperparams
+    ) -> BaseCompletion:
+        async with self._ratelimit_ctx(messages, functions):
             return await self.engine.predict(messages, functions, **hyperparams)
+
+    async def stream(self, messages: list[ChatMessage], functions: list[AIFunction] | None = None, **hyperparams):
+        async with self._ratelimit_ctx(messages, functions):
+            async for elem in self.engine.stream(messages, functions, **hyperparams):
+                yield elem
 
     # passthrough
     def message_len(self, message: ChatMessage) -> int:
