@@ -1,15 +1,12 @@
 import asyncio
 import contextlib
 from contextlib import nullcontext
-from typing import TYPE_CHECKING
 
 import aiolimiter
+from kani.ai_function import AIFunction
+from kani.engines.base import BaseCompletion
 from kani.engines.base import BaseEngine
-
-if TYPE_CHECKING:
-    from kani.ai_function import AIFunction
-    from kani.engines.base import BaseCompletion
-    from kani.models import ChatMessage
+from kani.models import ChatMessage
 
 
 class RatelimitedEngine(BaseEngine):
