@@ -4,15 +4,14 @@ from contextlib import nullcontext
 
 import aiolimiter
 from kani.ai_function import AIFunction
-from kani.engines.base import BaseCompletion
-from kani.engines.base import BaseEngine
+from kani.engines.base import BaseCompletion, WrapperEngine
 from kani.models import ChatMessage
 
 
-class RatelimitedEngine(BaseEngine):
+class RatelimitedEngine(WrapperEngine):
     def __init__(
         self,
-        engine: BaseEngine,
+        engine,
         *args,
         max_concurrency: int = None,
         rpm_limit: float = None,
@@ -42,8 +41,7 @@ class RatelimitedEngine(BaseEngine):
         :param tpm_period: The duration, in seconds, of the time period in which to limit the rate. Note that up to
             *tpm_limit* tokens are allowed within this time period in a burst (default 60s).
         """
-        super().__init__(*args, **kwargs)
-        self.engine = engine
+        super().__init__(engine, *args, **kwargs)
 
         if max_concurrency is None:
             self.concurrency_semaphore = nullcontext()
@@ -60,10 +58,6 @@ class RatelimitedEngine(BaseEngine):
         else:
             self.tpm_limiter = None
 
-        # passthrough attrs
-        self.max_context_size = self.engine.max_context_size
-        self.token_reserve = self.engine.token_reserve
-
     @contextlib.asynccontextmanager
     async def _ratelimit_ctx(self, messages: list[ChatMessage], functions: list[AIFunction] | None):
         if self.rpm_limiter:
@@ -78,22 +72,9 @@ class RatelimitedEngine(BaseEngine):
         self, messages: list[ChatMessage], functions: list[AIFunction] | None = None, **hyperparams
     ) -> BaseCompletion:
         async with self._ratelimit_ctx(messages, functions):
-            return await self.engine.predict(messages, functions, **hyperparams)
+            return await super().predict(messages, functions, **hyperparams)
 
     async def stream(self, messages: list[ChatMessage], functions: list[AIFunction] | None = None, **hyperparams):
         async with self._ratelimit_ctx(messages, functions):
-            async for elem in self.engine.stream(messages, functions, **hyperparams):
+            async for elem in super().stream(messages, functions, **hyperparams):
                 yield elem
-
-    # passthrough
-    def message_len(self, message: ChatMessage) -> int:
-        return self.engine.message_len(message)
-
-    def function_token_reserve(self, functions: list[AIFunction]) -> int:
-        return self.engine.function_token_reserve(functions)
-
-    async def close(self):
-        await self.engine.close()
-
-    def __getattr__(self, item):
-        return getattr(self.engine, item)
