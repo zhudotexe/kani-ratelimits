@@ -24,7 +24,7 @@ class RatelimitedEngine(WrapperEngine):
         A wrapper engine to enforce request-per-minute (RPM), token-per-minute (TPM), and/or max-concurrency ratelimits
         before making requests to the underlying engine.
 
-        .. code-blocK:: python
+        .. code-block:: python
 
             # limit requests to GPT-4 to 10 req/min and 30k tokens/min
             oai_engine = OpenAIEngine(api_key, model="gpt-4")
@@ -63,7 +63,7 @@ class RatelimitedEngine(WrapperEngine):
         if self.rpm_limiter:
             await self.rpm_limiter.acquire()
         if self.tpm_limiter:
-            n_toks = self.function_token_reserve(functions) + sum(self.message_len(m) for m in messages)
+            n_toks = await self.engine.prompt_len(messages, functions)
             await self.tpm_limiter.acquire(n_toks)
         async with self.concurrency_semaphore:
             yield
